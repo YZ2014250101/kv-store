@@ -1,9 +1,11 @@
 #include "kvstore.h"
+#include "skiplist.h"
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <functional>
 #include <iostream>
+#include <memory_resource>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -193,7 +195,8 @@ public:
      * 初始化监听socket，设置回调，进入事件循环
      */
     void start() {
-        int listenfd = init_listen(); // 初始化监听socket
+        int listenfd = init_listen(); // 初始化监听socke
+        kvstore_.init(16); // 初始化KV存储
         // 设置连接接受回调函数
         reactor_.set_listener(listenfd, [this](int fd, int event, void* arg) { this->accept_cb(fd, event, arg); });
         std::cout << "init finish, listening...\n";
@@ -203,7 +206,7 @@ public:
 private:
     int port_; // 服务器监听端口
     Reactor reactor_; // Reactor事件循环对象
-
+    KVStore kvstore_; // KV存储对象
     /**
      * 初始化监听socket
      * @return 返回监听socket的文件描述符，失败返回-1
@@ -245,19 +248,35 @@ private:
     void recv_cb(int fd, int event, void* arg) {
         Reactor* r = (Reactor*)arg;
         Connection* conn = r->get_conn(fd);
+        if (conn == nullptr) {
+            std::cout << "[ERROR] conn null! fd=" << fd << "\n";
+            return;
+        }
+        std::cout << "[DEBUG] recv_cb fd=" << fd << " rcount=" << conn->rcount_ << "\n";
+
         int n = recv(fd, conn->rbuffer_ + conn->rcount_, conn->next_len_, 0);
+        std::cout << "[DEBUG] recv return n=" << n << "\n";
         if (n <= 0) {
+            std::cout << "[DEBUG] close fd=" << fd << "\n";
             epoll_ctl(r->get_epfd_(), EPOLL_CTL_DEL, fd, nullptr);
             close(fd);
-            std::cout << "close fd:" << fd << "\n";
             return;
         }
         conn->rcount_ += n;
-        std::cout << "recv:" << conn->rbuffer_ << "\n";
+        std::cout << "recv:[" << conn->rbuffer_ << "] rcount=" << conn->rcount_ << "\n";
 
-        // echo逻辑，原样回包
-        memcpy(conn->wbuffer_, conn->rbuffer_, conn->rcount_);
-        conn->wcount_ = conn->rcount_;
+        std::string res = kvstore_.protocal(conn->rbuffer_, conn->rcount_);
+        std::cout << "[DEBUG] resp len=" << res.size() << "\n";
+
+        // 防止wbuffer越界！
+        if (res.size() >= max_buffer_len) {
+            std::cout << "[WARN] response too long!\n";
+            res = "resp too long\r\n";
+        }
+        const char* p = res.c_str();
+        memcpy(conn->wbuffer_, p, res.size());
+        conn->wcount_ = res.size();
+
         conn->rcount_ = 0;
         memset(conn->rbuffer_, 0, max_buffer_len);
 
@@ -265,7 +284,11 @@ private:
         epoll_event ev { };
         ev.data.fd = fd;
         ev.events = EPOLLOUT;
-        epoll_ctl(r->get_epfd_(), EPOLL_CTL_MOD, fd, &ev);
+        int ret = epoll_ctl(r->get_epfd_(), EPOLL_CTL_MOD, fd, &ev);
+        if (ret != 0) {
+            std::cout << "[ERROR] epoll_mod failed errno=" << errno << "\n";
+        }
+        std::cout << std::endl;
     }
 
     void send_cb(int fd, int event, void* arg) {

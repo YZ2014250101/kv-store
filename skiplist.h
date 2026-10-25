@@ -1,10 +1,32 @@
 #pragma once
 #include <string>
-using namespace std;
 typedef struct Node {
-    string key;
-    string value;
+    std::string key;
+    std::string value;
     Node** next;
+    int level;
+    Node(int level)
+        : key("")
+        , value("")
+        , next(new Node*[level])
+        , level(level) {
+        for (int i = 0; i < level; i++) {
+            next[i] = nullptr;
+        }
+    }
+    Node(std::string k, std::string v, int level)
+        : key(std::move(k))
+        , value(std::move(v))
+        , next(new Node*[level])
+        , level(level) {
+        for (int i = 0; i < level; ++i)
+            next[i] = nullptr;
+    }
+    ~Node() {
+        if (next) {
+            delete[] next;
+        }
+    }
 } Node;
 class Skiplist {
 public:
@@ -22,24 +44,28 @@ public:
     int listDesy();
     // 插入元素：有冲突则是头插法
     // 返回值：0成功，-1失败，-2已经有相应的key
-    int insert(string key, string value);
+    int insert(std::string key, std::string value);
     // 查找元素
     // 返回值：非空成功返回节点，NULL没找到
-    Node* find(string key);
+    Node* find(const std::string& key) const;
     // 删除元素
     // 返回值：0成功，-1失败，-2没有
-    int erase(string key);
+    int erase(const std::string& key);
     // 打印整个跳表
     // 返回值：0成功，-1失败
-    int print();
+    int print() const;
+    // 返回节点个数
+    int getNodeCnt() const { return nodeCnt; }
 
+public:
 private:
     // 创建节点并初始化
     // 返回值：非空成功，NULL失败
-    Node* nodeCreate(string key, string value, int level);
+    Node* nodeCreate(std::string key, std::string value, int level);
     // 销毁节点
     // 返回值：0成功，-1失败
     int nodeDesy(Node* node);
+    int randomLevel();
     Node* head;
     int curLevel;
     int maxLevel;
