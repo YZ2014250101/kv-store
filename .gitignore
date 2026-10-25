@@ -3,3 +3,5 @@ build/*
 kv-store/*
 main
 client
+test_kvstore
+test_skiplist
