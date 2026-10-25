@@ -134,7 +134,6 @@ std::string KVStore::protocal(char* buffer, size_t n) {
         out_val = "unknown cmd";
         break;
     }
-    print();
     out_val += "\n";
     return out_val;
 }
