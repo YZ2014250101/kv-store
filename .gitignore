@@ -1,6 +1,6 @@
 .cache/*
 build/*
-kvStore/*
+kvStore/
 main
 client
 test_kvstore
